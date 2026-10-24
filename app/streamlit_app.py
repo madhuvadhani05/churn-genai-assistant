@@ -50,6 +50,42 @@ row = {
     "PaymentMethod": payment, "MonthlyCharges": monthly, "TotalCharges": monthly * tenure,
 }
 
+import numpy as np
+import shap
+
+
+@st.cache_resource
+def get_explainer():
+    prep = pipe.named_steps["prep"]
+    clf = pipe.named_steps["model"]
+    df = pd.read_csv(ROOT / "data" / "raw" / "telco_churn.csv")
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce").fillna(0)
+    X = df.drop(columns=["customerID", "Churn"])
+    bg = prep.transform(X.sample(200, random_state=42))
+    bg = bg.toarray() if hasattr(bg, "toarray") else bg
+    return shap.LinearExplainer(clf, bg), prep
+
+
+def shap_reasons(row, top_n=4):
+    explainer, prep = get_explainer()
+    x = prep.transform(pd.DataFrame([row]))
+    x = x.toarray() if hasattr(x, "toarray") else x
+    vals = explainer.shap_values(x)[0]
+    names = prep.get_feature_names_out()
+    order = np.argsort(-vals)
+    out = []
+    for i in order:
+        if vals[i] <= 0 or len(out) == top_n:
+            continue
+        name = names[i]
+        if name.startswith("cat__") and x[0][i] == 0:
+            continue  # skip "absent category" features
+        label = name.replace("cat__", "").replace("num__", "")
+        if label == "tenure":
+            label = f"short tenure ({row['tenure']} month{'s' if row['tenure'] != 1 else ''})"
+        out.append(f"{label} (+{vals[i]:.2f})")
+    return out
+
 def get_reasons(row):
     reasons = []
     if row["Contract"] == "Month-to-month":
@@ -81,7 +117,7 @@ Do not invent discounts or prices; say "offer a discount" generally."""
 if st.button("Predict churn risk"):
     proba = float(pipe.predict_proba(pd.DataFrame([row]))[0, 1])
     st.metric("Churn probability", f"{proba:.1%}")
-    reasons = get_reasons(row)
+    reasons = shap_reasons(row) or get_reasons(row)
     if proba >= THRESHOLD:
         st.error("High risk: recommend a retention action")
         st.write("**Risk factors:** " + (", ".join(reasons) or "none"))

@@ -6,3 +6,4 @@ mlflow
 streamlit
 google-genai
 python-dotenv
+shap
