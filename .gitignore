@@ -10,7 +10,6 @@ __pycache__/
 .env
 
 # Data and models
-data/raw/
 *.pkl
 
 # MLflow

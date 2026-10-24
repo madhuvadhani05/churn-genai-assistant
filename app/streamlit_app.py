@@ -13,8 +13,12 @@ load_dotenv(ROOT / ".env")
 
 @st.cache_resource
 def load():
+    model_path = ROOT / "models" / "churn_pipeline.pkl"
+    if not model_path.exists():
+        import subprocess, sys
+        subprocess.run([sys.executable, str(ROOT / "src" / "train.py")], check=True)
     return (
-        joblib.load(ROOT / "models" / "churn_pipeline.pkl"),
+        joblib.load(model_path),
         joblib.load(ROOT / "models" / "threshold.pkl"),
     )
 
@@ -62,7 +66,8 @@ def get_reasons(row):
 
 
 def retention_advice(row, proba, reasons):
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
     prompt = f"""You are a telecom retention specialist.
 Customer: contract={row['Contract']}, tenure={row['tenure']} months,
 internet={row['InternetService']}, monthly charge={row['MonthlyCharges']},
