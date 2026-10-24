@@ -1,5 +1,7 @@
 # Telecom Customer Churn Prediction + GenAI Retention Assistant
 
+**Live demo:** https://churn-genai-assistant.streamlit.app
+
 End-to-end ML project that predicts which telecom customers are likely to churn and generates personalised retention actions using Gemini.
 
 ## Tech stack
