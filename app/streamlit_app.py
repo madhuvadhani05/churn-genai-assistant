@@ -1,21 +1,33 @@
 import os
+import sys
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import joblib
+import numpy as np
 import pandas as pd
+import shap
 import streamlit as st
 from dotenv import load_dotenv
 from google import genai
 
-ROOT = Path(__file__).resolve().parents[1]
+from rag.retriever import Retriever
 
+ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
+
+
+def get_api_key():
+    return os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+
 
 @st.cache_resource
 def load():
     model_path = ROOT / "models" / "churn_pipeline.pkl"
     if not model_path.exists():
-        import subprocess, sys
+        import subprocess
+
         subprocess.run([sys.executable, str(ROOT / "src" / "train.py")], check=True)
     return (
         joblib.load(model_path),
@@ -50,9 +62,6 @@ row = {
     "PaymentMethod": payment, "MonthlyCharges": monthly, "TotalCharges": monthly * tenure,
 }
 
-import numpy as np
-import shap
-
 
 @st.cache_resource
 def get_explainer():
@@ -61,7 +70,7 @@ def get_explainer():
     df = pd.read_csv(ROOT / "data" / "raw" / "telco_churn.csv")
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce").fillna(0)
     X = df.drop(columns=["customerID", "Churn"])
-    bg = prep.transform(X.sample(200, random_state=42))
+    bg = prep.transform(X.sample(100, random_state=42))
     bg = bg.toarray() if hasattr(bg, "toarray") else bg
     return shap.LinearExplainer(clf, bg), prep
 
@@ -79,12 +88,13 @@ def shap_reasons(row, top_n=4):
             continue
         name = names[i]
         if name.startswith("cat__") and x[0][i] == 0:
-            continue  # skip "absent category" features
+            continue
         label = name.replace("cat__", "").replace("num__", "")
         if label == "tenure":
             label = f"short tenure ({row['tenure']} month{'s' if row['tenure'] != 1 else ''})"
         out.append(f"{label} (+{vals[i]:.2f})")
     return out
+
 
 def get_reasons(row):
     reasons = []
@@ -101,29 +111,49 @@ def get_reasons(row):
     return reasons
 
 
+@st.cache_resource
+def get_retriever():
+    return Retriever(get_api_key())
+
+
 def retention_advice(row, proba, reasons):
-    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=get_api_key())
+    query = (
+        f"{row['Contract']} {row['InternetService']} {row['PaymentMethod']} "
+        f"tenure {row['tenure']} months tech support {row['TechSupport']}. "
+        + ", ".join(reasons)
+    )
+    chunks = get_retriever().search(query, k=3)
+    playbook = "\n\n".join(chunks)
     prompt = f"""You are a telecom retention specialist.
 Customer: contract={row['Contract']}, tenure={row['tenure']} months,
 internet={row['InternetService']}, monthly charge={row['MonthlyCharges']},
 payment={row['PaymentMethod']}. Churn probability: {proba:.0%}.
 Risk factors: {', '.join(reasons) or 'none'}.
-Suggest 3 short, specific retention actions based ONLY on these facts.
-Do not invent discounts or prices; say "offer a discount" generally."""
+
+Company retention playbook (use ONLY this for actions):
+{playbook}
+
+Suggest 3 short, specific retention actions based ONLY on the customer facts and the playbook.
+Do not invent discounts or prices. Mention which playbook section each action comes from."""
     resp = client.models.generate_content(model="gemini-flash-latest", contents=prompt)
-    return resp.text
+    return resp.text, chunks
+
 
 if st.button("Predict churn risk"):
     proba = float(pipe.predict_proba(pd.DataFrame([row]))[0, 1])
     st.metric("Churn probability", f"{proba:.1%}")
-    reasons = shap_reasons(row) or get_reasons(row)
     if proba >= THRESHOLD:
+        reasons = shap_reasons(row) or get_reasons(row)
         st.error("High risk: recommend a retention action")
         st.write("**Risk factors:** " + (", ".join(reasons) or "none"))
         with st.spinner("Generating retention advice..."):
             try:
-                st.write(retention_advice(row, proba, reasons))
+                advice, used = retention_advice(row, proba, reasons)
+                st.write(advice)
+                with st.expander("Playbook sections used"):
+                    for c in used:
+                        st.markdown(c)
             except Exception as e:
                 st.warning(f"AI advice unavailable: {e}")
     else:
