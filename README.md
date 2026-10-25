@@ -46,3 +46,7 @@ Create a `.env` file in the project root with `GEMINI_API_KEY=your_key`.
 
 ## Roadmap
 Docker, cloud deployment, RAG over a retention playbook, per-customer SHAP explanations. 
+
+## RAG retention assistant
+Risk factors (SHAP) are used to retrieve relevant sections from a sample retention playbook (Gemini embeddings + cosine similarity). Gemini then writes actions grounded in the retrieved text and cites the section.
+Note: the playbook is sample content written for this project, not a real company document.
