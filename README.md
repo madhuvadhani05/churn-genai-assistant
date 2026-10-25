@@ -49,6 +49,10 @@ Create a `.env` file in the project root with `GEMINI_API_KEY=your_key`.
 Risk factors (SHAP) are used to retrieve relevant sections from a sample retention playbook (Gemini embeddings + cosine similarity). Gemini then writes actions grounded in the retrieved text and cites the section.
 Note: the playbook is sample content written for this project, not a real company document.
 
+## Retrieval evaluation
+6 hand-written test queries against the sample playbook: hit rate @3 = 6/6 (100).
+Small, hand-made test set, so it is a sanity check, not a benchmark.
+
 ## Roadmap
-Docker, retrieval evaluation
+Docker
 
