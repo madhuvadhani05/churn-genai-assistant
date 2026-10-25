@@ -25,6 +25,7 @@ Hold-out test set: ROC-AUC 0.8415, PR-AUC 0.6325.
 - Electronic check users: 45.3% churn vs 15-19% for other payment methods
 - Churn is concentrated in the first ~10 months of tenure
 - Fiber optic customers churn more than DSL
+- Per-customer risk factors come from SHAP values on the logistic regression and are passed to Gemini to ground its advice.
 
 ## Threshold tuning
 A cost-based threshold of 0.35 is used (assumed costs: missed churner = Rs 500, retention offer = Rs 100). These costs are assumptions; the best threshold shifts with them.
@@ -44,9 +45,10 @@ Create a `.env` file in the project root with `GEMINI_API_KEY=your_key`.
 ![High risk](docs/high_risk.png)
 ![Low risk](docs/low_risk.png)
 
-## Roadmap
-Docker, cloud deployment, RAG over a retention playbook, per-customer SHAP explanations. 
-
 ## RAG retention assistant
 Risk factors (SHAP) are used to retrieve relevant sections from a sample retention playbook (Gemini embeddings + cosine similarity). Gemini then writes actions grounded in the retrieved text and cites the section.
 Note: the playbook is sample content written for this project, not a real company document.
+
+## Roadmap
+Docker, retrieval evaluation
+

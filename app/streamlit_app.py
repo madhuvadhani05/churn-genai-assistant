@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import shap
 import streamlit as st
+import time
 from dotenv import load_dotenv
 from google import genai
 
@@ -136,8 +137,17 @@ Company retention playbook (use ONLY this for actions):
 
 Suggest 3 short, specific retention actions based ONLY on the customer facts and the playbook.
 Do not invent discounts or prices. Mention which playbook section each action comes from."""
-    resp = client.models.generate_content(model="gemini-flash-latest", contents=prompt)
-    return resp.text, chunks
+
+    last_err = None
+    for model in ["gemini-flash-latest", "gemini-2.5-flash-lite"]:
+        for attempt in range(3):
+            try:
+                resp = client.models.generate_content(model=model, contents=prompt)
+                return resp.text, chunks
+            except Exception as e:
+                last_err = e
+                time.sleep(2 * (attempt + 1))
+    raise last_err
 
 
 if st.button("Predict churn risk"):
